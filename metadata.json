@@ -1,0 +1,6 @@
+{
+  "name": "Gestor de Sublimación y Semitonos",
+  "description": "Aplicación integral para diseñadores de sublimación: gestiona pedidos de forma eficiente, calcula parámetros de prensado y genera semitonos (halftones) profesionales a partir de imágenes para estampado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
