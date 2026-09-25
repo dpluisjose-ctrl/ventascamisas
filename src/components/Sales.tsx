@@ -2,18 +2,92 @@ import React, { useState } from 'react';
 import { SublimationOrder } from '../types';
 import { 
   DollarSign, ShoppingBag, Calendar, User, Search, Download, FileSpreadsheet,
-  CheckCircle, ArrowUpRight, Award, Layers, TrendingUp, Printer, X, Eye, Phone, Info
+  CheckCircle, ArrowUpRight, Award, Layers, TrendingUp, Printer, X, Eye, Phone, Info, Plus
 } from 'lucide-react';
 
 interface SalesProps {
   orders: SublimationOrder[];
   onUpdateOrder: (order: SublimationOrder) => void;
+  onAddSale: (sale: SublimationOrder) => void;
 }
 
-export default function Sales({ orders, onUpdateOrder }: SalesProps) {
+export default function Sales({ orders, onUpdateOrder, onAddSale }: SalesProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [productFilter, setProductFilter] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState<SublimationOrder | null>(null);
+
+  // Direct Sale Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [clientName, setClientName] = useState('Consumidor Final');
+  const [clientContact, setClientContact] = useState('');
+  const [productType, setProductType] = useState('Taza');
+  const [quantity, setQuantity] = useState(1);
+  const [price, setPrice] = useState(3000);
+  const [designNotes, setDesignNotes] = useState('Venta directa de mostrador');
+  const [stockItems, setStockItems] = useState<any[]>([]);
+
+  // Sync stock items on modal open
+  React.useEffect(() => {
+    const savedStock = localStorage.getItem('subligest_stock');
+    if (savedStock) {
+      try {
+        const parsed = JSON.parse(savedStock);
+        setStockItems(parsed);
+      } catch (e) {
+        console.error('Error loading stock in Sales', e);
+      }
+    }
+  }, [isModalOpen]);
+
+  // Open Direct Sale Dialog helper
+  const openNewSaleModal = () => {
+    setClientName('Consumidor Final');
+    setClientContact('');
+    
+    // Select first stock item default
+    const savedStock = localStorage.getItem('subligest_stock');
+    let firstItem = null;
+    if (savedStock) {
+      try {
+        const parsed = JSON.parse(savedStock);
+        if (parsed.length > 0) {
+          firstItem = parsed[0];
+        }
+      } catch (e) {}
+    }
+
+    const defaultType = firstItem ? firstItem.productType : 'Taza';
+    const initialPrice = firstItem ? firstItem.suggestedPrice : 3000;
+
+    setProductType(defaultType);
+    setQuantity(1);
+    setPrice(initialPrice);
+    setDesignNotes('Venta directa de mostrador');
+    setIsModalOpen(true);
+  };
+
+  // Submit Direct Sale Handler
+  const handleSubmitDirectSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const newSale: SublimationOrder = {
+      id: `sale-${Date.now()}`,
+      clientName: clientName.trim() || 'Consumidor Final',
+      clientContact: clientContact.trim(),
+      productType,
+      quantity,
+      price,
+      advancePayment: price, // fully paid on desk
+      dueDate: new Date().toISOString().split('T')[0],
+      status: 'Entregado',
+      priority: 'Baja',
+      designNotes: designNotes.trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    onAddSale(newSale);
+    setIsModalOpen(false);
+  };
 
   // Filter orders to only show completed/delivered ones (status === 'Entregado')
   const sales = orders.filter(o => o.status === 'Entregado');
@@ -166,7 +240,15 @@ export default function Sales({ orders, onUpdateOrder }: SalesProps) {
                 </p>
               </div>
 
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                <button
+                  onClick={openNewSaleModal}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-100 w-full sm:w-auto justify-center"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nueva Venta Directa
+                </button>
+
                 <button
                   onClick={handleExportCSV}
                   disabled={sales.length === 0}
@@ -430,6 +512,148 @@ export default function Sales({ orders, onUpdateOrder }: SalesProps) {
                 Imprimir Recibo
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct Sale Creator Modal Dialog */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100 flex flex-col font-sans border border-slate-200 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 bg-emerald-600 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Registrar Venta Directa de Mostrador</span>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer text-emerald-100 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSubmitDirectSale} className="p-6 space-y-4 text-xs">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Nombre del Cliente</label>
+                  <input
+                    type="text"
+                    required
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Ej. Consumidor Final / Sofia"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Contacto / Redes</label>
+                  <input
+                    type="text"
+                    value={clientContact}
+                    onChange={(e) => setClientContact(e.target.value)}
+                    placeholder="Ej. +54 9 11 ... / @instagram"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Tipo de Producto</label>
+                  <select
+                    value={productType}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setProductType(newType);
+                      const matchedItem = stockItems.find(item => item.productType === newType);
+                      if (matchedItem) {
+                        setPrice(matchedItem.suggestedPrice * quantity);
+                      }
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-semibold text-slate-700 cursor-pointer"
+                  >
+                    {stockItems.map((item) => (
+                      <option key={item.id || item.productType} value={item.productType}>
+                        {item.productType}s — (${item.suggestedPrice} c/u)
+                      </option>
+                    ))}
+                    <option value="Otro">Otro Producto...</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={quantity}
+                    onChange={(e) => {
+                      const newQty = Math.max(1, parseInt(e.target.value) || 1);
+                      setQuantity(newQty);
+                      const matchedItem = stockItems.find(item => item.productType === productType);
+                      if (matchedItem) {
+                        setPrice(matchedItem.suggestedPrice * newQty);
+                      }
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Precio de Venta Total ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={price}
+                  onChange={(e) => setPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                  placeholder="Monto total cobrado"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 bg-emerald-50/50"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Detalles o Notas de Venta</label>
+                <textarea
+                  value={designNotes}
+                  onChange={(e) => setDesignNotes(e.target.value)}
+                  placeholder="Ej. Entregado en local, diseño de catálogo..."
+                  rows={2}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-sans"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-800 leading-normal flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p>
+                  Esta venta se registrará inmediatamente como **Cobrada y Entregada**. Se guardará directamente en tu historial financiero y de facturación mensual, saltándose el flujo de preprensa y taller.
+                </p>
+              </div>
+
+              {/* Modal Actions Footer */}
+              <div className="pt-4 border-t border-slate-100 flex gap-2.5 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 border border-slate-200 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-100"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Confirmar Venta Directa
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

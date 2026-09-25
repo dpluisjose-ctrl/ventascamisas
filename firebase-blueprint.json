@@ -1,0 +1,61 @@
+{
+  "collections": {
+    "orders": {
+      "schema": {
+        "id": "string",
+        "clientName": "string",
+        "clientContact": "string",
+        "productType": "string",
+        "quantity": "number",
+        "price": "number",
+        "advancePayment": "number",
+        "dueDate": "string",
+        "status": "string",
+        "priority": "string",
+        "designNotes": "string",
+        "createdAt": "string"
+      },
+      "indexes": []
+    },
+    "expenses": {
+      "schema": {
+        "id": "string",
+        "description": "string",
+        "amount": "number",
+        "category": "string",
+        "date": "string",
+        "amortizationType": "string"
+      },
+      "indexes": []
+    },
+    "cashClosures": {
+      "schema": {
+        "id": "string",
+        "month": "string",
+        "salesTotal": "number",
+        "expensesTotal": "number",
+        "profit": "number",
+        "closedAt": "string"
+      },
+      "indexes": []
+    },
+    "stock": {
+      "schema": {
+        "id": "string",
+        "productType": "string",
+        "quantity": "number",
+        "unitCost": "number",
+        "suggestedPrice": "number",
+        "minAlert": "number"
+      },
+      "indexes": []
+    },
+    "productCosts": {
+      "schema": {
+        "productType": "string",
+        "unitCost": "number"
+      },
+      "indexes": []
+    }
+  }
+}

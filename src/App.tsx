@@ -13,6 +13,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Live Firebase integration
+import { db } from './firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
 // Seeding standard high-quality sublimation orders on first launch
 const SAMPLE_ORDERS: SublimationOrder[] = [
   {
@@ -79,60 +83,114 @@ export default function App() {
   const [selectedOrder, setSelectedOrder] = useState<SublimationOrder | null>(null);
   const [optimizedImageSrc, setOptimizedImageSrc] = useState<string | null>(null);
 
-  // Load orders from LocalStorage or seed sample data
+  // Real-time synchronization of orders with Firebase Firestore
   useEffect(() => {
-    const saved = localStorage.getItem('subligest_orders');
-    if (saved) {
-      try {
-        setOrders(JSON.parse(saved));
-      } catch (e) {
-        console.error('Error loading orders from localStorage, resetting with samples', e);
+    const unsubscribe = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const list: SublimationOrder[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as SublimationOrder);
+      });
+      // Sort orders by creation date descending
+      const sorted = list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setOrders(sorted);
+      localStorage.setItem('subligest_orders', JSON.stringify(sorted));
+    }, (error) => {
+      console.warn("Firestore syncing error, falling back to LocalStorage:", error);
+      const saved = localStorage.getItem('subligest_orders');
+      if (saved) {
+        try {
+          setOrders(JSON.parse(saved));
+        } catch (e) {}
+      } else {
         setOrders(SAMPLE_ORDERS);
       }
-    } else {
-      // Seed with sample data on first launch
-      setOrders(SAMPLE_ORDERS);
-      localStorage.setItem('subligest_orders', JSON.stringify(SAMPLE_ORDERS));
-    }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Save orders to LocalStorage
-  const saveOrders = (newOrders: SublimationOrder[]) => {
-    setOrders(newOrders);
+  // Save fallback helper
+  const saveOrdersLocally = (newOrders: SublimationOrder[]) => {
     localStorage.setItem('subligest_orders', JSON.stringify(newOrders));
   };
 
-  // Add order
-  const handleAddOrder = (order: SublimationOrder) => {
-    const updated = [order, ...orders];
-    saveOrders(updated);
+  // Add order to Firestore
+  const handleAddOrder = async (order: SublimationOrder) => {
+    setOrders(prev => [order, ...prev]);
+    saveOrdersLocally([order, ...orders]);
+    try {
+      await setDoc(doc(db, 'orders', order.id), order);
+    } catch (e) {
+      console.error("Error creating Firestore order:", e);
+    }
   };
 
-  // Update order
-  const handleUpdateOrder = (updatedOrder: SublimationOrder) => {
-    const updated = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
-    saveOrders(updated);
+  // Update order in Firestore
+  const handleUpdateOrder = async (updatedOrder: SublimationOrder) => {
+    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    saveOrdersLocally(orders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    try {
+      await setDoc(doc(db, 'orders', updatedOrder.id), updatedOrder);
+    } catch (e) {
+      console.error("Error updating Firestore order:", e);
+    }
   };
 
-  // Delete order
-  const handleDeleteOrder = (id: string) => {
-    const updated = orders.filter(o => o.id !== id);
-    saveOrders(updated);
+  // Delete order from Firestore
+  const handleDeleteOrder = async (id: string) => {
+    setOrders(prev => prev.filter(o => o.id !== id));
+    saveOrdersLocally(orders.filter(o => o.id !== id));
+    try {
+      await deleteDoc(doc(db, 'orders', id));
+    } catch (e) {
+      console.error("Error deleting Firestore order:", e);
+    }
   };
 
-  // Import JSON orders
-  const handleImportOrders = (imported: SublimationOrder[]) => {
-    saveOrders(imported);
+  // Import JSON orders and batch-save to Firestore
+  const handleImportOrders = async (imported: SublimationOrder[]) => {
+    setOrders(imported);
+    saveOrdersLocally(imported);
+    for (const order of imported) {
+      try {
+        await setDoc(doc(db, 'orders', order.id), order);
+      } catch (e) {
+        console.error("Error importing order to Firestore:", e);
+      }
+    }
   };
 
-  // Clear Database
-  const handleClearDatabase = () => {
-    saveOrders([]);
+  // Clear Database (Firestore + Local)
+  const handleClearDatabase = async () => {
+    const ordersCopy = [...orders];
+    setOrders([]);
+    saveOrdersLocally([]);
+    for (const order of ordersCopy) {
+      try {
+        await deleteDoc(doc(db, 'orders', order.id));
+      } catch (e) {
+        console.error("Error clearing order from Firestore:", e);
+      }
+    }
   };
 
-  // Load Sample Data
-  const handleLoadSampleData = () => {
-    saveOrders(SAMPLE_ORDERS);
+  // Load Sample Data into Firestore
+  const handleLoadSampleData = async () => {
+    // Clear first
+    for (const order of orders) {
+      try {
+        await deleteDoc(doc(db, 'orders', order.id));
+      } catch (e) {}
+    }
+    setOrders(SAMPLE_ORDERS);
+    saveOrdersLocally(SAMPLE_ORDERS);
+    for (const order of SAMPLE_ORDERS) {
+      try {
+        await setDoc(doc(db, 'orders', order.id), order);
+      } catch (e) {
+        console.error("Error seeding sample order to Firestore:", e);
+      }
+    }
   };
 
   // Drilldown to specific order from Dashboard
@@ -305,6 +363,7 @@ export default function App() {
               <Sales 
                 orders={orders}
                 onUpdateOrder={handleUpdateOrder}
+                onAddSale={handleAddOrder}
               />
             )}
 
